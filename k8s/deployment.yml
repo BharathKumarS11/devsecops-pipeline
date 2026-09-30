@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: devsecops-webapp
+  namespace: default
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: devsecops-webapp
+
+  template:
+    metadata:
+      labels:
+        app: devsecops-webapp
+
+    spec:
+      containers:
+        - name: webapp
+
+          image: IMAGE_PLACEHOLDER
+
+          ports:
+            - containerPort: 5000
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: devsecops-webapp
+
+spec:
+  type: LoadBalancer
+
+  selector:
+    app: devsecops-webapp
+
+  ports:
+    - port: 80
+      targetPort: 5000
