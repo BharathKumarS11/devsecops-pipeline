@@ -49,28 +49,35 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Set ECR Registry
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_ENV"
+
       - name: Build Image
         run: |
           docker build \
-            -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+            -t devsecops-webapp:${{ github.sha }} .
 
       - name: Trivy Image Scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: '${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
-          #severity: CRITICAL,HIGH
-         # exit-code: 1
+          image-ref: 'devsecops-webapp:${{ github.sha }}'
+          severity: CRITICAL,HIGH
+          exit-code: 1
 
       - name: Tag and Push Image
         run: |
-          IMAGE_URI=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${{ github.sha }}"
 
           echo "IMAGE_URI=$IMAGE_URI"
 
-          docker tag devsecops-webapp:${{ github.sha }} "$IMAGE_URI"
-  
+          docker tag \
+            devsecops-webapp:${{ github.sha }} \
+            "$IMAGE_URI"
+
           docker push "$IMAGE_URI"
-          
+
   deploy:
     name: Deploy to EKS
     needs: build-push
