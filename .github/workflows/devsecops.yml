@@ -61,11 +61,10 @@ jobs:
           #severity: CRITICAL,HIGH
          # exit-code: 1
 
-      - name: Tag Image
+      - name: Tag Docker image
         run: |
-          docker tag \
-            ${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+           tag devsecops-webapp:${{ github.sha }} \
+           896305834488.dkr.ecr.ap-south-1.amazonaws.com/devsecops-webapp:${{ github.sha }}
 
       - name: Push Image
         run: |
