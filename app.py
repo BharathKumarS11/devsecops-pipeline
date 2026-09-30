@@ -7,7 +7,7 @@ app = Flask(__name__)
 def home():
     return f"""
     <h1>DevSecOps Application</h1>
-    <p>Running on Amazon EKS</p>
+    <p>Running on a Amazon EKS</p>
     <p>Pod: {socket.gethostname()}</p>
     """
 
