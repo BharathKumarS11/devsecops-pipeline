@@ -64,7 +64,7 @@ jobs:
       - name: Tag Image
         run: |
           docker tag 
-            ${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            ${{ env.ECR_REPOSITORY }}:${{ github.sha }} 
             ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
       - name: Push Image
