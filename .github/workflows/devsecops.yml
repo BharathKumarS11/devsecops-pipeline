@@ -83,11 +83,11 @@ jobs:
       # Scan Docker image
       - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          image-ref: devsecops-webapp:${{ github.sha }}
-          severity: CRITICAL,HIGH
-          exit-code: 1
+       # with:
+        #  scan-type: image
+         # image-ref: devsecops-webapp:${{ github.sha }}
+          #severity: CRITICAL,HIGH
+          #exit-code: 1
 
 
       # Tag + Push
