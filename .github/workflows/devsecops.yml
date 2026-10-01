@@ -15,11 +15,15 @@ env:
 
 jobs:
 
+  # ==========================================
+  # 1. SECURITY SCAN
+  # ==========================================
   security:
     name: Security Scan
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -31,82 +35,141 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: 1
 
+
+  # ==========================================
+  # 2. BUILD + SCAN + PUSH TO ECR
+  # ==========================================
   build-push:
     name: Build and Push
     needs: security
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS
+
+      # AWS OIDC
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
+
+      # Get AWS Account ID
+      - name: Get AWS Account ID
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
+            --query Account \
+            --output text)
+
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> "$GITHUB_ENV"
+
+
+      # Login to ECR
+      - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set ECR Registry
-        run: |
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_ENV"
 
-      - name: Build Image
+      # Build Docker image
+      - name: Build Docker Image
         run: |
           docker build \
             -t devsecops-webapp:${{ github.sha }} .
 
+
+      # Scan Docker image
       - name: Trivy Image Scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: 'devsecops-webapp:${{ github.sha }}'
+          scan-type: image
+          image-ref: devsecops-webapp:${{ github.sha }}
           severity: CRITICAL,HIGH
           exit-code: 1
 
+
+      # Tag + Push
       - name: Tag and Push Image
         run: |
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${{ github.sha }}"
 
+          echo "ECR_REGISTRY=$ECR_REGISTRY"
           echo "IMAGE_URI=$IMAGE_URI"
 
           docker tag \
-            devsecops-webapp:${{ github.sha }} \
+            "devsecops-webapp:${{ github.sha }}" \
             "$IMAGE_URI"
 
           docker push "$IMAGE_URI"
 
+
+  # ==========================================
+  # 3. DEPLOY TO EKS
+  # ==========================================
   deploy:
     name: Deploy to EKS
     needs: build-push
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS
+
+      # AWS OIDC
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+
+      # Configure kubectl
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
-            --region $AWS_REGION \
+            --region "$AWS_REGION" \
             --name devops-eks-project4
 
-      - name: Deploy
-        run: |
-          sed -i \
-          "s|IMAGE_PLACEHOLDER|${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}|" \
-          k8s/deployment.yaml
 
+      # Get AWS Account ID
+      - name: Get AWS Account ID
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
+            --query Account \
+            --output text)
+
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> "$GITHUB_ENV"
+
+
+      # Prepare Kubernetes manifest
+      - name: Prepare Kubernetes Deployment
+        run: |
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${{ github.sha }}"
+
+          echo "IMAGE_URI=$IMAGE_URI"
+
+          sed -i \
+            "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g" \
+            k8s/deployment.yaml
+
+
+      # Deploy
+      - name: Deploy to EKS
+        run: |
           kubectl apply -f k8s/deployment.yaml
 
+
+      # Wait for rollout
       - name: Wait for Deployment
         run: |
           kubectl rollout status \
